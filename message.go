@@ -137,6 +137,11 @@ func (r *DefaultMessageReceiver) IsConnOpen() bool {
 	return r.conn.GetState() == StateOpen
 }
 
+type BufReader interface {
+	io.Reader
+	io.ByteScanner
+}
+
 type MessageSender interface {
 	SetConn(c *Conn) MessageSender
 
@@ -145,7 +150,7 @@ type MessageSender interface {
 
 	BeginSendFrame()
 	SendFrame(data []byte, opcode uint8, begin bool, end bool, mask bool) (n int, err error)
-	SendFrameWithReader(r io.Reader, opcode uint8, perFrameSize int, mask bool) (n int, err error)
+	SendFrameWithReader(r BufReader, opcode uint8, perFrameSize int, mask bool) (n int, err error)
 	EndSendFrame()
 
 	SendClose(code uint16, reason string, useCodeText bool, mask bool)
@@ -241,27 +246,47 @@ func (s *DefaultMessageSender) SendFrame(data []byte, opcode uint8, begin bool, 
 	return frame.WriteTo(s.conn, mask)
 }
 
-func (s *DefaultMessageSender) SendFrameWithReader(r io.Reader, opcode uint8, perFrameSize int, mask bool) (n int, err error) {
-	idx := 0
+func (s *DefaultMessageSender) SendFrameWithReader(r BufReader, opcode uint8, perFrameSize int, mask bool) (n int, err error) {
+	if s.conn.GetState() != StateOpen {
+		return 0, ErrConnIsNotOpen
+	}
+
 	buf := make([]byte, perFrameSize)
+
+	si := 0
+	begin := true
+	end := false
 
 	for {
 		i, err := r.Read(buf)
 
-		if err == nil || err == io.EOF {
-			if i > 0 {
-				begin := idx == 0
-				end := err == io.EOF
-
-				if _, err := s.SendFrame(buf[:i], opcode, begin, end, mask); err != nil {
-					return 0, err
-				}
+		if i > 0 {
+			// read one more byte to see if EOF is coming up
+			_, pre := r.ReadByte()
+			if pre == io.EOF {
+				end = true
+			} else {
+				r.UnreadByte()
 			}
-		} else {
-			return 0, err
+
+			if si, err = s.SendFrame(buf[:i], opcode, begin, end, mask); err != nil {
+				return 0, err
+			}
+
+			n += si
+			begin = false
+
+			if pre == io.EOF {
+				return n, nil
+			}
 		}
 
-		idx++
+		if err != nil {
+			if err == io.EOF {
+				return n, nil
+			}
+			return 0, err
+		}
 	}
 }
 
