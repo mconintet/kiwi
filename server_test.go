@@ -2,8 +2,6 @@ package kiwi
 
 import (
 	"bytes"
-	"errors"
-	"fmt"
 	"log"
 	"net"
 	"reflect"

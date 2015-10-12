@@ -33,6 +33,7 @@ func (m *Message) IsPong() bool {
 
 type MessageReceiver interface {
 	SetConn(c *Conn) MessageReceiver
+	GetConn() *Conn
 
 	ReadWhole(maxMsgDataLen uint64) (msg *Message, err error)
 
@@ -56,6 +57,10 @@ type DefaultMessageReceiver struct {
 func (r *DefaultMessageReceiver) SetConn(c *Conn) MessageReceiver {
 	r.conn = c
 	return r
+}
+
+func (r *DefaultMessageReceiver) GetConn() *Conn {
+	return r.conn
 }
 
 func (r *DefaultMessageReceiver) ReadWhole(maxMsgDataLen uint64) (msg *Message, err error) {
