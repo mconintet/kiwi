@@ -27,7 +27,7 @@ func TestEcho(t *testing.T) {
 			}
 
 			log.Printf("new message with opcode:%d", msg.Opcode)
-			
+
 			if msg.IsText() {
 				msgText := string(msg.Data)
 				log.Println(msgText)
@@ -63,7 +63,7 @@ func TestEchoFrame(t *testing.T) {
 				s.SendClose(CloseCodeGoingAway, "", true, false)
 				break
 			}
-			
+
 			log.Printf("new message with opcode:%d", msg.Opcode)
 
 			if msg.IsText() {
@@ -89,32 +89,6 @@ func TestEchoFrame(t *testing.T) {
 	srv.ListenAndServe()
 }
 
-func Unicode2utf8(u uint32) (u8 []byte, err error) {
-	if u <= 0x7F {
-		return []byte{byte(u)}, nil
-	} else if u >= 0x80 && u <= 0x7FF {
-		return []byte{
-			byte(u>>6 | 0xC0),
-			byte(u&0x3F | 0x80),
-		}, nil
-	} else if u >= 0x800 && u <= 0xFFFF {
-		return []byte{
-			byte(u>>12 | 0xE0),
-			byte((u&0xFC0)>>6 | 0x80),
-			byte(u&0x3F | 0x80),
-		}, nil
-	} else if u >= 0x10000 && u <= 0x10FFFF {
-		return []byte{
-			byte(u>>18 | 0xF0),
-			byte((u&0x3F000)>>12 | 0x80),
-			byte((u&0xFC0)>>6 | 0x80),
-			byte(u&0x3F | 0x80),
-		}, nil
-	}
-
-	return nil, errors.New(fmt.Sprintf("deformed unicode: %d", u))
-}
-
 func TestUnicode2utf8(t *testing.T) {
 	u8, _ := Unicode2utf8(0x75)
 	if !reflect.DeepEqual(u8, []byte{0x75}) {
@@ -137,34 +111,6 @@ func TestUnicode2utf8(t *testing.T) {
 	}
 }
 
-func Utf82unicode(u8 []byte) (u uint32, err error) {
-	u8l := len(u8)
-
-	if u8l == 0 {
-		return 0, errors.New("empty utf8")
-	}
-
-	b1 := u8[0]
-	if b1 <= 0x7F {
-		return uint32(b1), nil
-	} else if b1>>5 == 0x6 && u8l == 2 {
-		return uint32(b1&0x1F)<<6 |
-			uint32(u8[1]&0x3F), nil
-	} else if b1>>4 == 0xE && u8l == 3 {
-		return uint32(b1&0xF)<<12 |
-			uint32(u8[1]&0x3F)<<6 |
-			uint32(u8[2]&0x3F), nil
-
-	} else if b1>>3 == 0x1E && u8l == 4 {
-		return uint32(b1&0x7)<<18 |
-			uint32(u8[1]&0x3F)<<12 |
-			uint32(u8[2]&0x3F)<<6 |
-			uint32(u8[3]&0x3F), nil
-	}
-
-	return 0, errors.New(fmt.Sprintf("deformed utf8: %d", u8))
-}
-
 func TestUtf82unicode(t *testing.T) {
 	u, _ := Utf82unicode([]byte{0x75})
 	if u != 0x75 {
@@ -185,63 +131,6 @@ func TestUtf82unicode(t *testing.T) {
 	if u != 0x1F604 {
 		t.Fatal("not pass '😄'")
 	}
-}
-
-func IsIntactUtf8(u8 []byte) bool {
-	i := 0
-	u8l := len(u8)
-
-	for {
-		if i == u8l {
-			break
-		}
-
-		b1 := u8[i]
-		var tu uint32
-
-		switch {
-		case b1 <= 0x7F:
-		case b1>>5 == 0x6:
-			if u8l-i >= 2 &&
-				u8[i+1]&0xC0 == 0x80 &&
-				// U+0000 encoded in two bytes: incorrect
-				(u8[i] > 0xC0 || u8[i+1] > 0x80) {
-				i++
-			} else {
-				return false
-			}
-		case b1>>4 == 0xE:
-			if u8l-i >= 3 {
-				tu = uint32(b1&0xF)<<12 |
-					uint32(u8[i+1]&0x3F)<<6 |
-					uint32(u8[i+2]&0x3F)
-
-				// UTF-8 prohibits encoding character numbers between U+D800 and U+DFFF
-				if tu >= 0x800 && tu <= 0xFFFF && !(tu >= 0xD800 && tu <= 0xDFFF) {
-					i += 2
-				} else {
-					return false
-				}
-			} else {
-				return false
-			}
-		case b1>>3 == 0x1E:
-			if u8l-i >= 4 &&
-				u8[i]&0x7 <= 0x4 &&
-				u8[i+1]&0xC0 == 0x80 && u8[i+1]&0x3F <= 0xF &&
-				u8[i+2]&0xC0 == 0x80 &&
-				u8[i+3]&0xC0 == 0x80 {
-				i += 3
-			} else {
-				return false
-			}
-		default:
-			return false
-		}
-		i++
-	}
-
-	return i == u8l
 }
 
 type ValidTest struct {
@@ -277,16 +166,16 @@ func TestIsIntactUtf8(t *testing.T) {
 	}
 }
 
-
 type makeAcceptKeyTest struct {
-	in string
+	in  string
 	out string
 }
 
 var makeAcceptKeyTests = []makeAcceptKeyTest{
-	{"M/A=","5oBJ6efz0YUYE2VFXcCfYKTBqYY="},
+	{"M/A=", "5oBJ6efz0YUYE2VFXcCfYKTBqYY="},
 }
-func TestMakeAcceptKey(t *testing.T){
+
+func TestMakeAcceptKey(t *testing.T) {
 	for _, tt := range makeAcceptKeyTests {
 		if MakeAcceptKey(tt.in) != tt.out {
 			t.Fatalf("request key: %s with: %s got: %s", tt.in, MakeAcceptKey(tt.in), tt.out)
