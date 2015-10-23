@@ -75,6 +75,8 @@ func (r DefaultOnConnOpenRouter) Serve(reqPath string, conn *Conn) {
 }
 
 type Conn struct {
+	ID uint64
+
 	rwc   net.Conn
 	state int32
 
@@ -126,7 +128,7 @@ func (c *Conn) doHandshake() (errCode int, err error) {
 
 func (c *Conn) Close() {
 	c.rwc.Close()
-	atomic.AddInt64(&c.Server.connCount, -1)
+	c.Server.ConnPool.Del(c)
 }
 
 func (c *Conn) FailHandshake(code int, err error) {
@@ -135,7 +137,7 @@ func (c *Conn) FailHandshake(code int, err error) {
 	buf.WriteString("\r\n")
 	buf.WriteString(err.Error() + "\n")
 	buf.Flush()
-	c.rwc.Close()
+	c.Close()
 
 	log.Printf("[Handshake] %s\n", err.Error())
 }

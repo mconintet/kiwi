@@ -2,6 +2,7 @@ package kiwi
 
 import (
 	"net"
+	"sync"
 	"sync/atomic"
 )
 
@@ -9,10 +10,43 @@ const (
 	defaultMaxHandshakeBytes = 1 << 20
 )
 
+type ConnPool struct {
+	p     map[uint64]*Conn
+	idx   uint64
+	mu    sync.Mutex
+	count uint64
+}
+
+func NewConnPool() *ConnPool {
+	cp := &ConnPool{}
+	cp.p = make(map[uint64]*Conn)
+	return cp
+}
+
+func (cp *ConnPool) Add(c *Conn) {
+	cp.mu.Lock()
+	cp.idx++
+	c.ID = cp.idx
+	cp.p[cp.idx] = c
+	cp.count++
+	cp.mu.Unlock()
+}
+
+func (cp *ConnPool) Del(c *Conn) {
+	cp.mu.Lock()
+	delete(cp.p, c.ID)
+	cp.count--
+	cp.mu.Unlock()
+}
+
+func (cp *ConnPool) Count() uint64 {
+	return cp.count
+}
+
 type Server struct {
 	Addr              *net.TCPAddr
 	MaxHandshakeBytes int
-	connCount         int64
+	ConnPool          *ConnPool
 
 	handshakeReqRouter OnHandshakeRequestRouter
 	onConnOpenRouter   OnConnOpenRouter
@@ -20,6 +54,7 @@ type Server struct {
 
 func NewServer() *Server {
 	srv := &Server{}
+	srv.ConnPool = NewConnPool()
 	return srv
 }
 
@@ -35,7 +70,7 @@ func (srv *Server) serve(ln *net.TCPListener) error {
 			}
 		} else {
 			conn := newConn(srv, cn)
-			atomic.AddInt64(&srv.connCount, 1)
+			srv.ConnPool.Add(conn)
 			go conn.serve()
 		}
 	}
