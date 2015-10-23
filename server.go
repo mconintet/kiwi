@@ -3,7 +3,6 @@ package kiwi
 import (
 	"net"
 	"sync"
-	"sync/atomic"
 )
 
 const (
@@ -30,6 +29,13 @@ func (cp *ConnPool) Add(c *Conn) {
 	cp.p[cp.idx] = c
 	cp.count++
 	cp.mu.Unlock()
+}
+
+func (cp *ConnPool) Get(id uint64) (*Conn, bool) {
+	cp.mu.Lock()
+	c, ok := cp.p[id]
+	cp.mu.Unlock()
+	return c, ok
 }
 
 func (cp *ConnPool) Del(c *Conn) {
