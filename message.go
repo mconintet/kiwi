@@ -149,9 +149,11 @@ type BufReader interface {
 
 type MessageSender interface {
 	SetConn(c *Conn) MessageSender
+	GetConn() *Conn
 
 	SendWhole(msg *Message, mask bool) (n int, err error)
 	SendWholeWithReader(r io.Reader, opcode uint8, mask bool) (n int, err error)
+	SendWholeBytes(byts []byte, mask bool) (n int, err error)
 
 	BeginSendFrame()
 	SendFrame(data []byte, opcode uint8, begin bool, end bool, mask bool) (n int, err error)
@@ -172,6 +174,10 @@ func (s *DefaultMessageSender) SetConn(c *Conn) MessageSender {
 	return s
 }
 
+func (s *DefaultMessageSender) GetConn() *Conn {
+	return s.conn
+}
+
 func (s *DefaultMessageSender) SendWhole(msg *Message, mask bool) (n int, err error) {
 	defer s.mu.Unlock()
 	s.mu.Lock()
@@ -186,6 +192,14 @@ func (s *DefaultMessageSender) SendWhole(msg *Message, mask bool) (n int, err er
 	frame.PayloadData = msg.Data
 
 	return frame.WriteTo(s.conn, mask)
+}
+
+func (s *DefaultMessageSender) SendWholeBytes(byts []byte, mask bool) (n int, err error) {
+	msg := &Message{}
+	msg.Opcode = OpcodeText
+	msg.Data = byts
+
+	return s.SendWhole(msg, mask)
 }
 
 func (s *DefaultMessageSender) SendWholeWithReader(r io.Reader, opcode uint8, mask bool) (n int, err error) {
