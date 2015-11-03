@@ -63,7 +63,10 @@ func (r DefaultOnConnOpenRouter) HasHandler(reqPath string) bool {
 }
 
 func (r DefaultOnConnOpenRouter) Serve(reqPath string, conn *Conn) {
-	handler := r[reqPath]
+	handler, ok := r[reqPath]
+	if !ok {
+		return
+	}
 
 	receiver := &DefaultMessageReceiver{}
 	receiver.SetConn(conn)
@@ -72,6 +75,42 @@ func (r DefaultOnConnOpenRouter) Serve(reqPath string, conn *Conn) {
 	sender.SetConn(conn)
 
 	handler.ServerConn(receiver, sender)
+}
+
+type OnConnCloseHandler interface {
+	ServerConn(c *Conn)
+}
+
+type OnConnCloseFunc func(c *Conn)
+
+func (f OnConnCloseFunc) ServerConn(c *Conn) {
+	f(c)
+}
+
+type OnConnCloseRouter interface {
+	HandleFunc(pattern string, fn OnConnCloseFunc)
+	HasHandler(reqPath string) bool
+	Serve(reqPath string, conn *Conn)
+}
+
+type DefaultOnConnCloseRouter map[string]OnConnCloseHandler
+
+func (r DefaultOnConnCloseRouter) HandleFunc(pattern string, fn OnConnCloseFunc) {
+	r[pattern] = fn
+}
+
+func (r DefaultOnConnCloseRouter) HasHandler(reqPath string) bool {
+	_, ok := r[reqPath]
+	return ok
+}
+
+func (r DefaultOnConnCloseRouter) Serve(reqPath string, conn *Conn) {
+	handler, ok := r[reqPath]
+	if !ok {
+		return
+	}
+
+	handler.ServerConn(conn)
 }
 
 type Conn struct {
@@ -127,6 +166,7 @@ func (c *Conn) doHandshake() (errCode int, err error) {
 }
 
 func (c *Conn) Close() {
+	c.Server.onConnCloseRouter.Serve(c.HandshakeRequest.RequestURL.Path, c)
 	c.rwc.Close()
 	c.Server.ConnPool.Del(c)
 }

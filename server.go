@@ -56,6 +56,7 @@ type Server struct {
 
 	handshakeReqRouter OnHandshakeRequestRouter
 	onConnOpenRouter   OnConnOpenRouter
+	onConnCloseRouter  OnConnCloseRouter
 }
 
 func NewServer() *Server {
@@ -90,6 +91,10 @@ func (srv *Server) ApplyDefaultCfg() {
 	if srv.onConnOpenRouter == nil {
 		srv.onConnOpenRouter = DefaultOnConnOpenRouter{}
 	}
+
+	if srv.onConnCloseRouter == nil {
+		srv.onConnCloseRouter = DefaultOnConnCloseRouter{}
+	}
 }
 
 func (srv *Server) OnConnOpenFunc(pattern string, fn OnConnOpenFunc) {
@@ -102,6 +107,19 @@ func (srv *Server) OnConnOpenFunc(pattern string, fn OnConnOpenFunc) {
 	if pattern[len(pattern)-1] != '/' {
 		pattern += "/"
 		srv.onConnOpenRouter.HandleFunc(pattern, fn)
+	}
+}
+
+func (srv *Server) OnConnCloseFunc(pattern string, fn OnConnCloseFunc) {
+	if srv.onConnCloseRouter.HasHandler(pattern) {
+		panic("OnConnCloseFunc already exist with pattern: " + pattern)
+	}
+
+	srv.onConnCloseRouter.HandleFunc(pattern, fn)
+
+	if pattern[len(pattern)-1] != '/' {
+		pattern += "/"
+		srv.onConnCloseRouter.HandleFunc(pattern, fn)
 	}
 }
 
